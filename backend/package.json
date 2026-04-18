@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
+    "build-frontend": "cd ../frontend && npm run build",
+    "prestart": "npm run build-frontend",
     "start": "node server.js"
   },
   "keywords": [],

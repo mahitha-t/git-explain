@@ -7,92 +7,153 @@
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #07101f;
   color: #eef2ff;
+  --surface: rgba(12, 22, 41, 0.92);
+  --surface-strong: rgba(9, 16, 30, 0.98);
+  --border: rgba(86, 110, 197, 0.22);
+  --muted: #9db2d6;
+  --accent: #5faeff;
+  --accent-soft: rgba(95, 174, 255, 0.16);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top, rgba(79, 157, 255, 0.18), transparent 35%),
-    linear-gradient(180deg, #07101f 0%, #02070f 100%);
+  background: radial-gradient(circle at top left, rgba(79, 157, 255, 0.12), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(104, 216, 255, 0.08), transparent 20%),
+    linear-gradient(180deg, #061022 0%, #02070f 100%);
 }
 
 main {
-  max-width: 1040px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 2rem 1.25rem 3rem;
+  padding: 2.25rem 1.5rem 3rem;
 }
 
 .hero {
   text-align: center;
+  padding: 2rem 1rem 2.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.hero-copy {
+  display: inline-block;
+  max-width: 720px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(2.25rem, 3vw, 3.5rem);
+  font-size: clamp(2.5rem, 4vw, 4.5rem);
   line-height: 1.02;
 }
 
 .hero p {
-  margin: 0.75rem 0 0;
-  max-width: 52rem;
-  color: #b8c7de;
+  margin: 1rem auto 0;
+  max-width: 56rem;
+  color: var(--muted);
   font-size: 1.05rem;
+  line-height: 1.75;
+}
+
+.panel,
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  box-shadow: 0 28px 80px rgba(7, 13, 26, 0.18);
+  padding: 2rem;
+}
+
+.panel {
+  padding: 2rem;
+  margin-top: 2rem;
+}
+
+.panel-header {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+
+.panel-description {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  max-width: 40rem;
+  line-height: 1.75;
 }
 
 .form {
-  margin-top: 2rem;
   display: grid;
-  gap: 2rem;
+  gap: 1.5rem;
 }
 
 .grid-two {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1rem;
 }
 
 label {
   display: grid;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.55rem;
+  color: #e8edf8;
+  font-weight: 600;
 }
 
 input,
 textarea {
   width: 100%;
-  border: 1px solid #23314b;
-  border-radius: 0.9rem;
-  background: rgba(11, 18, 32, 0.8);
-  color: #f8fbff;
-  padding: 0.95rem 1rem;
+  border: 1px solid rgba(110, 143, 205, 0.16);
+  border-radius: 1rem;
+  background: rgba(8, 16, 32, 0.9);
+  color: #f6f9ff;
+  padding: 1rem 1.1rem;
   font-size: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+textarea:focus {
   outline: none;
+  border-color: rgba(95, 174, 255, 0.55);
+  box-shadow: 0 0 0 4px rgba(95, 174, 255, 0.12);
 }
 
 textarea {
-  min-height: 260px;
+  min-height: 180px;
   resize: vertical;
 }
 
 .actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 button {
   border: none;
   border-radius: 999px;
-  padding: 0.95rem 1.45rem;
+  padding: 1rem 1.5rem;
   font-weight: 700;
   color: #fff;
   background: linear-gradient(135deg, #4f9dff, #85c4ff);
   cursor: pointer;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 14px 30px rgba(79, 157, 255, 0.22);
 }
 
 button:disabled {
-  opacity: 0.65;
-  cursor: wait;
+  opacity: 0.68;
+  cursor: not-allowed;
 }
 
 button:hover:not(:disabled) {
@@ -100,7 +161,7 @@ button:hover:not(:disabled) {
 }
 
 .status-row {
-  margin-top: 1rem;
+  margin-top: 1.75rem;
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
@@ -108,65 +169,67 @@ button:hover:not(:disabled) {
 
 .status,
 .error {
+  display: inline-flex;
+  align-items: center;
   padding: 0.95rem 1rem;
-  border-radius: 0.9rem;
+  border-radius: 1rem;
   font-size: 0.95rem;
 }
 
 .status {
-  background: rgba(72, 104, 255, 0.15);
-  border: 1px solid rgba(79, 157, 255, 0.25);
+  background: rgba(95, 174, 255, 0.12);
+  border: 1px solid rgba(95, 174, 255, 0.2);
 }
 
 .error {
   background: rgba(255, 85, 85, 0.12);
-  border: 1px solid rgba(255, 85, 85, 0.25);
+  border: 1px solid rgba(255, 85, 85, 0.2);
   color: #ffd2d2;
 }
 
 .result {
   margin-top: 2rem;
   display: grid;
-  gap: 1rem;
-}
-
-.card {
-  background: rgba(15, 26, 52, 0.8);
-  border: 1px solid #1a2d4c;
-  border-radius: 1rem;
-  padding: 1.35rem;
+  gap: 1.25rem;
 }
 
 .card.full {
-  padding-top: 1.5rem;
+  padding: 2rem;
+}
+
+.result-heading {
+  display: grid;
+  gap: 0.5rem;
 }
 
 .card h2,
 .card h3 {
-  margin-top: 0;
+  margin: 1rem 0 0;
+}
+
+.card p {
+  margin: 0.85rem 0 0;
+  color: #c8d1ee;
+  line-height: 1.75;
 }
 
 .grid-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
 }
 
-ul {
-  margin: 0.8rem 0 0;
-  padding-left: 1.3rem;
-}
-
-.card p {
-  margin: 0.5rem 0 0;
+.raw-card {
+  overflow: hidden;
 }
 
 pre {
-  margin: 0.85rem 0 0;
+  margin: 1rem 0 0;
   padding: 1rem;
   overflow-x: auto;
-  background: rgba(6, 12, 23, 0.95);
-  border-radius: 0.85rem;
+  background: rgba(7, 13, 25, 0.96);
+  border-radius: 1rem;
   color: #d8e4ff;
   font-size: 0.92rem;
+  line-height: 1.5;
 }
