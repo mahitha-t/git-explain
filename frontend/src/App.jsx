@@ -17,6 +17,14 @@ function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+  const [rangeResponse, setRangeResponse] = useState(emptyResponse);
+  const [rangeMeta, setRangeMeta] = useState(null);
+  const [rangeStatus, setRangeStatus] = useState("");
+  const [rangeError, setRangeError] = useState("");
+  const [rangeLoading, setRangeLoading] = useState(false);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -69,6 +77,59 @@ function App() {
     }
   };
 
+  const handleRangeSubmit = async (event) => {
+    event.preventDefault();
+    setRangeError("");
+    setRangeStatus("");
+    setRangeResponse(emptyResponse);
+    setRangeMeta(null);
+
+    if (!repoOwner.trim() || !repoName.trim()) {
+      setRangeError("Repo owner and repo name are required.");
+      return;
+    }
+    if (!rangeStart.trim() || !rangeEnd.trim()) {
+      setRangeError("Choose a start and end date (inclusive).");
+      return;
+    }
+
+    const payload = {
+      repoOwner: repoOwner.trim(),
+      repoName: repoName.trim(),
+      startDate: rangeStart.trim(),
+      endDate: rangeEnd.trim(),
+    };
+
+    setRangeLoading(true);
+    setRangeStatus("Fetching commits and generating summary…");
+
+    try {
+      const result = await fetch("/api/summarize-range", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await result.json();
+      if (!result.ok) {
+        setRangeError(data.error || "Unable to summarize this range.");
+      } else {
+        setRangeResponse({
+          summary: data.summary || "No summary returned.",
+          key_changes: Array.isArray(data.key_changes) ? data.key_changes : [],
+          risks: Array.isArray(data.risks) ? data.risks : [],
+          impact: Array.isArray(data.impact) ? data.impact : [],
+        });
+        setRangeMeta(data.meta ?? null);
+        setRangeStatus("Range summary complete.");
+      }
+    } catch (err) {
+      setRangeError(err.message || "Unexpected error reaching the API.");
+    } finally {
+      setRangeLoading(false);
+    }
+  };
+
   return (
     <main>
       <section className="hero">
@@ -76,8 +137,9 @@ function App() {
           <p className="eyebrow">AI-powered commit briefing</p>
           <h1>Github Commit Summary</h1>
           <p>
-            Generate concise, stakeholder-ready commit summaries with risks,
-            impact, and key changes in a single click.
+            Generate concise, stakeholder-ready commit summaries—or roll up every
+            commit in a date range into one briefing with risks, impact, and key
+            themes.
           </p>
         </div>
       </section>
@@ -146,6 +208,56 @@ function App() {
         </div>
       </section>
 
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Release notes</p>
+            <h2>Summarize updates in a date range</h2>
+            <p className="panel-description">
+              Uses the repository&apos;s default branch. Dates are inclusive (UTC
+              calendar days). A GitHub token in the server environment is
+              recommended for private repos and higher rate limits.
+            </p>
+          </div>
+        </div>
+
+        <form className="form" onSubmit={handleRangeSubmit}>
+          <div className="grid-two">
+            <label>
+              Start date
+              <input
+                type="date"
+                value={rangeStart}
+                onChange={(event) => setRangeStart(event.target.value)}
+              />
+            </label>
+            <label>
+              End date
+              <input
+                type="date"
+                value={rangeEnd}
+                onChange={(event) => setRangeEnd(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <p className="panel-description" style={{ margin: 0 }}>
+            Repo: use the same owner and name as in the section above.
+          </p>
+
+          <div className="actions">
+            <button type="submit" disabled={rangeLoading}>
+              {rangeLoading ? "Summarizing range…" : "Summarize date range"}
+            </button>
+          </div>
+        </form>
+
+        <div className="status-row">
+          {rangeStatus && <div className="status">{rangeStatus}</div>}
+          {rangeError && <div className="error">{rangeError}</div>}
+        </div>
+      </section>
+
       {response.summary && (
         <section className="result">
           <div className="card full">
@@ -188,6 +300,65 @@ function App() {
               <div className="section-list">
                 {response.impact.length > 0 ? (
                   response.impact.map((item, idx) => (
+                    <p key={idx}>• {item}</p>
+                  ))
+                ) : (
+                  <p>• No impact items generated.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {rangeResponse.summary && (
+        <section className="result">
+          <div className="card full">
+            <div className="result-heading">
+              <h2>Range summary</h2>
+              <p>
+                {rangeMeta
+                  ? `${rangeMeta.commit_count} commit${rangeMeta.commit_count === 1 ? "" : "s"} · ${rangeMeta.start_date} → ${rangeMeta.end_date}${
+                      rangeMeta.diff_truncated ? " · diff truncated for length" : ""
+                    }${rangeMeta.diff_source === "per_commit" ? " · combined from per-commit patches" : ""}`
+                  : "AI briefing for the selected period."}
+              </p>
+            </div>
+            <p>{rangeResponse.summary}</p>
+          </div>
+
+          <div className="grid-cards">
+            <div className="card section-card">
+              <h3>Key changes</h3>
+              <div className="section-list">
+                {rangeResponse.key_changes.length > 0 ? (
+                  rangeResponse.key_changes.map((item, idx) => (
+                    <p key={idx}>• {item}</p>
+                  ))
+                ) : (
+                  <p>• No detected key changes.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="card section-card">
+              <h3>Risks</h3>
+              <div className="section-list">
+                {rangeResponse.risks.length > 0 ? (
+                  rangeResponse.risks.map((item, idx) => (
+                    <p key={idx}>• {item}</p>
+                  ))
+                ) : (
+                  <p>• No significant risks detected.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="card section-card">
+              <h3>Impact</h3>
+              <div className="section-list">
+                {rangeResponse.impact.length > 0 ? (
+                  rangeResponse.impact.map((item, idx) => (
                     <p key={idx}>• {item}</p>
                   ))
                 ) : (
