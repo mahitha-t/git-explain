@@ -3,24 +3,24 @@
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #07101f;
-  color: #eef2ff;
-  --surface: rgba(12, 22, 41, 0.92);
-  --surface-strong: rgba(9, 16, 30, 0.98);
-  --border: rgba(86, 110, 197, 0.22);
-  --muted: #9db2d6;
-  --accent: #5faeff;
-  --accent-soft: rgba(95, 174, 255, 0.16);
+  background: #f4f6fb;
+  color: #1a2332;
+  --surface: #ffffff;
+  --surface-strong: #f8fafc;
+  --border: rgba(30, 58, 95, 0.12);
+  --muted: #4a5568;
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.1);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top left, rgba(79, 157, 255, 0.12), transparent 24%),
-    radial-gradient(circle at bottom right, rgba(104, 216, 255, 0.08), transparent 20%),
-    linear-gradient(180deg, #061022 0%, #02070f 100%);
+  background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.06), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.05), transparent 28%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
 }
 
 main {
@@ -32,7 +32,7 @@ main {
 .hero {
   text-align: center;
   padding: 2rem 1rem 2.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(30, 58, 95, 0.08);
 }
 
 .hero-copy {
@@ -55,6 +55,7 @@ main {
   margin: 0;
   font-size: clamp(2.5rem, 4vw, 4.5rem);
   line-height: 1.02;
+  color: #0f172a;
 }
 
 .hero p {
@@ -70,7 +71,7 @@ main {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 1.5rem;
-  box-shadow: 0 28px 80px rgba(7, 13, 26, 0.18);
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06), 0 12px 48px rgba(15, 23, 42, 0.04);
   padding: 2rem;
 }
 
@@ -83,6 +84,10 @@ main {
   display: grid;
   gap: 0.75rem;
   margin-bottom: 1.75rem;
+}
+
+.panel-header h2 {
+  color: #0f172a;
 }
 
 .panel-description {
@@ -106,17 +111,17 @@ main {
 label {
   display: grid;
   gap: 0.55rem;
-  color: #e8edf8;
+  color: #1e293b;
   font-weight: 600;
 }
 
 input,
 textarea {
   width: 100%;
-  border: 1px solid rgba(110, 143, 205, 0.16);
+  border: 1px solid rgba(30, 58, 95, 0.18);
   border-radius: 1rem;
-  background: rgba(8, 16, 32, 0.9);
-  color: #f6f9ff;
+  background: var(--surface-strong);
+  color: #0f172a;
   padding: 1rem 1.1rem;
   font-size: 1rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -125,8 +130,9 @@ textarea {
 input:focus,
 textarea:focus {
   outline: none;
-  border-color: rgba(95, 174, 255, 0.55);
-  box-shadow: 0 0 0 4px rgba(95, 174, 255, 0.12);
+  border-color: rgba(37, 99, 235, 0.55);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  background: #fff;
 }
 
 textarea {
@@ -145,10 +151,10 @@ button {
   padding: 1rem 1.5rem;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(135deg, #4f9dff, #85c4ff);
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 14px 30px rgba(79, 157, 255, 0.22);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.28);
 }
 
 button:disabled {
@@ -177,14 +183,15 @@ button:hover:not(:disabled) {
 }
 
 .status {
-  background: rgba(95, 174, 255, 0.12);
-  border: 1px solid rgba(95, 174, 255, 0.2);
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  color: #1e3a8a;
 }
 
 .error {
-  background: rgba(255, 85, 85, 0.12);
-  border: 1px solid rgba(255, 85, 85, 0.2);
-  color: #ffd2d2;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  color: #991b1b;
 }
 
 .result {
@@ -202,14 +209,23 @@ button:hover:not(:disabled) {
   gap: 0.5rem;
 }
 
+.result-heading h2 {
+  color: #0f172a;
+}
+
+.result-heading p {
+  color: var(--muted);
+}
+
 .card h2,
 .card h3 {
   margin: 1rem 0 0;
+  color: #0f172a;
 }
 
 .card p {
   margin: 0.85rem 0 0;
-  color: #c8d1ee;
+  color: #334155;
   line-height: 1.75;
 }
 
@@ -227,9 +243,10 @@ pre {
   margin: 1rem 0 0;
   padding: 1rem;
   overflow-x: auto;
-  background: rgba(7, 13, 25, 0.96);
+  background: #f1f5f9;
+  border: 1px solid var(--border);
   border-radius: 1rem;
-  color: #d8e4ff;
+  color: #1e293b;
   font-size: 0.92rem;
   line-height: 1.5;
 }

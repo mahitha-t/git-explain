@@ -231,16 +231,23 @@ function parseModelJson(text) {
   }
 }
 
+const INSIGHT_BULLET_RULES = `Insight list rules (key_changes, risks, impact):
+- Each item is a single short line: headline-style, no more than ~15 words or ~120 characters.
+- No multi-sentence bullets, semicolons chaining ideas, or subordinate clauses.
+- At most 5 items per array; fewer is fine if it still covers what matters.`;
+
 function buildPrompt({ diff, commitMessage, commitSha, repoOwner, repoName }) {
   return `You are an expert software engineer reviewing a git commit diff for quality, risk, and impact.
 
 Use simple and clear language in your responses.
 
+${INSIGHT_BULLET_RULES}
+
 Return valid JSON only with the following keys:
-- summary
-- key_changes (array)
-- risks (array)
-- impact (array)
+- summary (string: can be a short paragraph)
+- key_changes (array of short strings)
+- risks (array of short strings)
+- impact (array of short strings)
 
 Commit SHA: ${commitSha || "N/A"}
 Repository: ${repoOwner && repoName ? `${repoOwner}/${repoName}` : "N/A"}
@@ -274,11 +281,13 @@ function buildRangePrompt({
 
 Use simple and clear language. Focus on themes, user-visible behavior, and engineering risk across the whole period—not a per-commit list unless it helps clarity.
 
+${INSIGHT_BULLET_RULES}
+
 ${diffModeNote}Return valid JSON only with the following keys:
-- summary (string: overview of what changed in this period)
-- key_changes (array: main themes or features touched)
-- risks (array)
-- impact (array)
+- summary (string: overview of what changed in this period; a short paragraph is fine)
+- key_changes (array: main themes—each item one short line)
+- risks (array of short strings)
+- impact (array of short strings)
 
 Repository: ${repoOwner}/${repoName}
 Date range (inclusive): ${startDate} through ${endDate}
