@@ -16,6 +16,21 @@ function formatApiError(err) {
   return msg || "Unexpected error reaching the API.";
 }
 
+async function parseApiJsonResponse(result) {
+  const contentType = result.headers.get("content-type") || "";
+  const text = await result.text();
+
+  if (!contentType.includes("application/json")) {
+    throw new Error(`API returned non-JSON (status ${result.status}). Check deployment routing and API path.`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`API returned invalid JSON (status ${result.status}).`);
+  }
+}
+
 const emptyResponse = {
   summary: "",
   key_changes: [],
@@ -66,7 +81,7 @@ function App() {
         const result = await fetch(apiUrl(`/api/commits?${params.toString()}`), {
           signal: controller.signal,
         });
-        const data = await result.json();
+        const data = await parseApiJsonResponse(result);
         if (!result.ok) {
           setCommitOptions([]);
           setCommitsError(data.error || "Unable to fetch commits for this repository.");
@@ -137,7 +152,7 @@ function App() {
         body: JSON.stringify(payload),
       });
 
-      const data = await result.json();
+      const data = await parseApiJsonResponse(result);
       if (!result.ok) {
         setError(data.error || "Unable to generate summary.");
       } else {
@@ -189,7 +204,7 @@ function App() {
         body: JSON.stringify(payload),
       });
 
-      const data = await result.json();
+      const data = await parseApiJsonResponse(result);
       if (!result.ok) {
         setRangeError(data.error || "Unable to summarize this range.");
       } else {

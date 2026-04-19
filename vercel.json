@@ -4,11 +4,7 @@
     "rewrites": [
         {
             "source": "/_/backend/api/:path*",
-            "destination": "/backend/server.js"
-        },
-        {
-            "source": "/api/:path*",
-            "destination": "/backend/server.js"
+            "destination": "/api/:path*"
         },
         {
             "source": "/:path*",
