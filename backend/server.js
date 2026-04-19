@@ -20,12 +20,76 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+/** Override with e.g. gemini-2.0-flash if 2.5 hits free-tier quota. */
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 const GITHUB_JSON = "application/vnd.github.v3+json";
 const MAX_RANGE_COMMITS = 500;
-const MAX_RANGE_DIFF_CHARS = 280_000;
+const MAX_RANGE_DIFF_CHARS = Number(process.env.MAX_RANGE_DIFF_CHARS) || 120_000;
+const MAX_SINGLE_COMMIT_DIFF_CHARS = Number(process.env.MAX_SINGLE_COMMIT_DIFF_CHARS) || 100_000;
 /** When compare(base...head) is unavailable (e.g. empty-tree base), cap per-commit fetches. */
 const MAX_AGGREGATE_COMMIT_PATCHES = 100;
+
+const GEMINI_RATE_LIMIT_ATTEMPTS = 4;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isGeminiRateLimitError(error) {
+  const msg = error?.message ?? String(error);
+  return (
+    msg.includes("429") ||
+    /too many requests/i.test(msg) ||
+    /resource_exhausted/i.test(msg) ||
+    /quota exceeded/i.test(msg) ||
+    /rate.limit/i.test(msg)
+  );
+}
+
+/** Parses "Please retry in 9.254731735s" from Gemini error text. */
+function parseRetryAfterSecondsFromMessage(message) {
+  const m = message.match(/retry in\s+([\d.]+)\s*s/i);
+  if (m) return Math.min(120, Math.max(1, parseFloat(m[1]) || 10));
+  return null;
+}
+
+async function generateContentWithBackoff(model, prompt) {
+  let lastError;
+  for (let attempt = 0; attempt < GEMINI_RATE_LIMIT_ATTEMPTS; attempt++) {
+    try {
+      return await model.generateContent(prompt);
+    } catch (err) {
+      lastError = err;
+      if (!isGeminiRateLimitError(err) || attempt === GEMINI_RATE_LIMIT_ATTEMPTS - 1) {
+        throw err;
+      }
+      const msg = err?.message ?? String(err);
+      const suggested = parseRetryAfterSecondsFromMessage(msg);
+      const waitSec = suggested ?? Math.min(45, 8 * (attempt + 1));
+      const waitMs = Math.ceil(waitSec * 1000) + Math.floor(Math.random() * 400);
+      console.warn(`Gemini rate limit; waiting ${waitMs}ms before retry ${attempt + 2}/${GEMINI_RATE_LIMIT_ATTEMPTS}`);
+      await sleep(waitMs);
+    }
+  }
+  throw lastError;
+}
+
+function sendModelError(res, error) {
+  const message = error?.message ?? String(error);
+
+  if (isGeminiRateLimitError(error)) {
+    const retryAfter = Math.ceil(parseRetryAfterSecondsFromMessage(message) ?? 15);
+    res.setHeader("Retry-After", String(Math.max(1, retryAfter)));
+    return res.status(429).json({
+      error:
+        "Gemini API rate limit or quota was exceeded (often the free tier per-minute token cap). Wait a bit and try again, use a smaller commit or shorter date range, set GEMINI_MODEL to another flash model, or check billing and limits: https://ai.google.dev/gemini-api/docs/rate-limits",
+    });
+  }
+
+  console.error(error);
+  return res.status(500).json({ error: message || "Unexpected server error." });
+}
 
 function githubHeaders(accept = GITHUB_JSON) {
   const headers = {
@@ -38,14 +102,39 @@ function githubHeaders(accept = GITHUB_JSON) {
   return headers;
 }
 
+async function throwGithubResponseError(response, context) {
+  const text = await response.text();
+  const status = response.status;
+  if (status === 404) {
+    const base =
+      "GitHub returned 404 (not found). Confirm owner and repo match the GitHub URL (e.g. facebook/react → owner facebook, repo react).";
+    if (context === "commit") {
+      throw new Error(
+        `${base} The commit SHA must exist in that repository. If the repo is private, set GITHUB_TOKEN in backend/.env and restart—without a token GitHub hides private resources as 404.`
+      );
+    }
+    throw new Error(
+      `${base} For private repositories, add GITHUB_TOKEN in backend/.env and restart the server.`
+    );
+  }
+  if (status === 403) {
+    throw new Error(
+      `GitHub returned 403. You may be rate-limited (authenticate with GITHUB_TOKEN) or lack access to this repo. ${text ? text.slice(0, 240) : ""}`
+    );
+  }
+  throw new Error(`GitHub API returned ${status}: ${response.statusText}${text ? ` - ${text}` : ""}`);
+}
+
 async function fetchGithubDiff(commitSha, owner, repo) {
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${commitSha}`, {
+  const sha = encodeURIComponent(String(commitSha).trim());
+  const o = encodeURIComponent(String(owner).trim());
+  const r = encodeURIComponent(String(repo).trim());
+  const response = await fetch(`https://api.github.com/repos/${o}/${r}/commits/${sha}`, {
     headers: githubHeaders("application/vnd.github.v3.diff"),
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`GitHub API returned ${response.status}: ${response.statusText}${message ? ` - ${message}` : ""}`);
+    await throwGithubResponseError(response, "commit");
   }
 
   return await response.text();
@@ -78,8 +167,7 @@ async function fetchGithubCommitsInRange(owner, repo, sinceIso, untilIso) {
 
     const response = await fetch(url, { headers: githubHeaders() });
     if (!response.ok) {
-      const message = await response.text();
-      throw new Error(`GitHub API returned ${response.status}: ${response.statusText}${message ? ` - ${message}` : ""}`);
+      await throwGithubResponseError(response, "commits_list");
     }
 
     const batch = await response.json();
@@ -132,7 +220,7 @@ async function buildRangeDiff(commits, owner, repo) {
   const headSha = newest.sha;
 
   if (commits.length === 1) {
-    let diff = await fetchGithubDiff(commits[0].sha);
+    let diff = await fetchGithubDiff(commits[0].sha, owner, repo);
     let diffTruncated = false;
     if (diff.length > MAX_RANGE_DIFF_CHARS) {
       diff = diff.slice(0, MAX_RANGE_DIFF_CHARS);
@@ -178,7 +266,7 @@ async function buildRangeDiff(commits, owner, repo) {
   let combined = "";
   let diffTruncated = false;
   for (const c of commits) {
-    const patch = await fetchGithubDiff(c.sha);
+    const patch = await fetchGithubDiff(c.sha, owner, repo);
     const line = (c.commit?.message || "").split("\n")[0] || "";
     const block = `\n\n=== ${c.sha.slice(0, 7)} ${line.slice(0, 120)} ===\n${patch}`;
     if (combined.length + block.length > MAX_RANGE_DIFF_CHARS) {
@@ -236,7 +324,7 @@ const INSIGHT_BULLET_RULES = `Insight list rules (key_changes, risks, impact):
 - No multi-sentence bullets, semicolons chaining ideas, or subordinate clauses.
 - At most 5 items per array; fewer is fine if it still covers what matters.`;
 
-function buildPrompt({ diff, commitMessage, commitSha, repoOwner, repoName }) {
+function buildPrompt({ diff, commitMessage, commitSha, repoOwner, repoName, diffTruncated }) {
   return `You are an expert software engineer reviewing a git commit diff for quality, risk, and impact.
 
 Use simple and clear language in your responses.
@@ -252,7 +340,7 @@ Return valid JSON only with the following keys:
 Commit SHA: ${commitSha || "N/A"}
 Repository: ${repoOwner && repoName ? `${repoOwner}/${repoName}` : "N/A"}
 Commit message: ${commitMessage || "N/A"}
-
+${diffTruncated ? "\nNote: The diff below was truncated for length; mention uncertainty if omitted parts could matter.\n" : ""}
 DIFF:
 ${diff}
 `;
@@ -310,24 +398,29 @@ app.post("/api/summarize", async (req, res) => {
       if (!repoOwner || !repoName) {
         return res.status(400).json({ error: "Commit SHA requires repoOwner and repoName when a diff is not provided." });
       }
-      diff = await fetchGithubDiff(commitSha, repoOwner, repoName);
+      diff = await fetchGithubDiff(commitSha.trim(), repoOwner.trim(), repoName.trim());
     }
 
     if (!diff) {
       return res.status(400).json({ error: "Please provide a git diff or a commit SHA with repoOwner and repoName." });
     }
 
-    const prompt = buildPrompt({ diff, commitMessage, commitSha, repoOwner, repoName });
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const result = await model.generateContent(prompt);
+    let diffTruncated = false;
+    if (diff.length > MAX_SINGLE_COMMIT_DIFF_CHARS) {
+      diff = diff.slice(0, MAX_SINGLE_COMMIT_DIFF_CHARS);
+      diffTruncated = true;
+    }
+
+    const prompt = buildPrompt({ diff, commitMessage, commitSha, repoOwner, repoName, diffTruncated });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const result = await generateContentWithBackoff(model, prompt);
     const response = await result.response;
     const text = await response.text();
     const payload = parseModelJson(text);
 
     res.json(payload);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message || "Unexpected server error." });
+    return sendModelError(res, error);
   }
 });
 
@@ -373,8 +466,8 @@ app.post("/api/summarize-range", async (req, res) => {
       diffSource,
     });
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const result = await model.generateContent(prompt);
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const result = await generateContentWithBackoff(model, prompt);
     const responseText = await result.response.text();
     const payload = parseModelJson(responseText);
 
@@ -391,8 +484,7 @@ app.post("/api/summarize-range", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message || "Unexpected server error." });
+    return sendModelError(res, error);
   }
 });
 

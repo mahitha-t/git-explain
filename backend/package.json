@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
+    "dev": "node server.js",
     "build-frontend": "cd ../frontend && npm run build",
     "prestart": "npm run build-frontend",
     "start": "node server.js"
