@@ -1,4 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+/** Empty = same origin (Vite proxy to :8000 in dev, or Express serving dist in prod). Set VITE_API_BASE_URL for other hosts (e.g. deployed API). */
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+function apiUrl(path) {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return API_BASE ? `${API_BASE}${p}` : p;
+}
+
+function formatApiError(err) {
+  const msg = err?.message ?? String(err);
+  if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("CONNECTION_REFUSED")) {
+    return "Cannot reach the API (connection refused). Start the backend on port 8000, or from the repo root run: npm install && npm run dev";
+  }
+  return msg || "Unexpected error reaching the API.";
+}
 
 const emptyResponse = {
   summary: "",
@@ -12,6 +28,10 @@ function App() {
   const [commitMessage, setCommitMessage] = useState("");
   const [repoOwner, setRepoOwner] = useState("");
   const [repoName, setRepoName] = useState("");
+  const [commitOptions, setCommitOptions] = useState([]);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsError, setCommitsError] = useState("");
+  const [commitsTruncated, setCommitsTruncated] = useState(false);
   const [response, setResponse] = useState(emptyResponse);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -24,6 +44,65 @@ function App() {
   const [rangeStatus, setRangeStatus] = useState("");
   const [rangeError, setRangeError] = useState("");
   const [rangeLoading, setRangeLoading] = useState(false);
+
+  useEffect(() => {
+    const owner = repoOwner.trim();
+    const repo = repoName.trim();
+
+    if (!owner || !repo) {
+      setCommitOptions([]);
+      setCommitsError("");
+      setCommitsTruncated(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(async () => {
+      setCommitsLoading(true);
+      setCommitsError("");
+      setCommitsTruncated(false);
+      try {
+        const params = new URLSearchParams({ repoOwner: owner, repoName: repo });
+        const result = await fetch(apiUrl(`/api/commits?${params.toString()}`), {
+          signal: controller.signal,
+        });
+        const data = await result.json();
+        if (!result.ok) {
+          setCommitOptions([]);
+          setCommitsError(data.error || "Unable to fetch commits for this repository.");
+          return;
+        }
+
+        const options = Array.isArray(data.commits) ? data.commits : [];
+        setCommitOptions(options);
+        setCommitsTruncated(Boolean(data.truncated));
+
+        if (options.length === 0) {
+          setCommitSha("");
+          return;
+        }
+
+        const hasSelected = options.some((item) => item.sha === commitSha);
+        if (!hasSelected) {
+          setCommitSha(options[0].sha);
+          if (!commitMessage.trim()) {
+            setCommitMessage(options[0].message || "");
+          }
+        }
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        setCommitOptions([]);
+        setCommitsError(formatApiError(err));
+      } finally {
+        setCommitsLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [repoOwner, repoName]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -52,7 +131,7 @@ function App() {
     setStatus("Generating summary...");
 
     try {
-      const result = await fetch("/api/summarize", {
+      const result = await fetch(apiUrl("/api/summarize"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -71,7 +150,7 @@ function App() {
         setStatus("Summary complete.");
       }
     } catch (err) {
-      setError(err.message || "Unexpected error reaching the API.");
+      setError(formatApiError(err));
     } finally {
       setLoading(false);
     }
@@ -104,7 +183,7 @@ function App() {
     setRangeStatus("Fetching commits and generating summary…");
 
     try {
-      const result = await fetch("/api/summarize-range", {
+      const result = await fetch(apiUrl("/api/summarize-range"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -124,7 +203,7 @@ function App() {
         setRangeStatus("Range summary complete.");
       }
     } catch (err) {
-      setRangeError(err.message || "Unexpected error reaching the API.");
+      setRangeError(formatApiError(err));
     } finally {
       setRangeLoading(false);
     }
@@ -134,8 +213,8 @@ function App() {
     <main>
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">AI-powered commit briefing</p>
-          <h1>Github Commit Summary</h1>
+          <p className="eyebrow">Smart Commit Briefing</p>
+          <h1>Git the Gist</h1>
           <p>
             Generate concise, stakeholder-ready commit summaries—or roll up every
             commit in a date range into one briefing with risks, impact, and key
@@ -159,25 +238,6 @@ function App() {
         <form className="form" onSubmit={handleSubmit}>
           <div className="grid-two">
             <label>
-              Commit SHA
-              <input
-                value={commitSha}
-                onChange={(event) => setCommitSha(event.target.value)}
-                placeholder="abc123def456"
-              />
-            </label>
-            <label>
-              Commit message
-              <input
-                value={commitMessage}
-                onChange={(event) => setCommitMessage(event.target.value)}
-                placeholder="Fix auth validation on signup"
-              />
-            </label>
-          </div>
-
-          <div className="grid-two">
-            <label>
               GitHub repo owner
               <input
                 value={repoOwner}
@@ -191,6 +251,61 @@ function App() {
                 value={repoName}
                 onChange={(event) => setRepoName(event.target.value)}
                 placeholder="repository"
+              />
+            </label>
+          </div>
+
+          <div className="status-row">
+            {commitsLoading && <div className="status">Loading commits...</div>}
+            {commitsError && <div className="error">{commitsError}</div>}
+            {!commitsLoading && !commitsError && commitsTruncated && (
+              <div className="status">Showing the newest 300 commits for this repository.</div>
+            )}
+          </div>
+
+          <div className="grid-two">
+            <label>
+              Commit SHA
+              <select
+                value={commitSha}
+                onChange={(event) => {
+                  const sha = event.target.value;
+                  setCommitSha(sha);
+                  const selected = commitOptions.find((item) => item.sha === sha);
+                  if (selected && !commitMessage.trim()) {
+                    setCommitMessage(selected.message || "");
+                  }
+                }}
+                disabled={!repoOwner.trim() || !repoName.trim() || commitsLoading || commitOptions.length === 0}
+              >
+                <option value="">
+                  {!repoOwner.trim() || !repoName.trim()
+                    ? "Enter repo owner and name first"
+                    : commitsLoading
+                      ? "Loading commits..."
+                      : commitOptions.length === 0
+                        ? "No commits found"
+                        : "Select a commit"}
+                </option>
+                {commitOptions.map((item) => (
+                  <option key={item.sha} value={item.sha}>
+                    {item.short_sha} - {item.message || "(no commit message)"}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={commitSha}
+                onChange={(event) => setCommitSha(event.target.value)}
+                placeholder="Or paste a full SHA manually"
+                style={{ marginTop: "0.5rem" }}
+              />
+            </label>
+            <label>
+              Commit message
+              <input
+                value={commitMessage}
+                onChange={(event) => setCommitMessage(event.target.value)}
+                placeholder="Fix auth validation on signup"
               />
             </label>
           </div>

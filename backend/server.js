@@ -25,6 +25,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 const GITHUB_JSON = "application/vnd.github.v3+json";
 const MAX_RANGE_COMMITS = 500;
+const MAX_DROPDOWN_COMMITS = 300;
 const MAX_RANGE_DIFF_CHARS = Number(process.env.MAX_RANGE_DIFF_CHARS) || 120_000;
 const MAX_SINGLE_COMMIT_DIFF_CHARS = Number(process.env.MAX_SINGLE_COMMIT_DIFF_CHARS) || 100_000;
 /** When compare(base...head) is unavailable (e.g. empty-tree base), cap per-commit fetches. */
@@ -185,6 +186,38 @@ async function fetchGithubCommitsInRange(owner, repo, sinceIso, untilIso) {
 
   commits.sort((a, b) => new Date(a.commit.committer.date) - new Date(b.commit.committer.date));
   return commits;
+}
+
+async function fetchGithubCommitsForDropdown(owner, repo, maxCommits = MAX_DROPDOWN_COMMITS) {
+  const commits = [];
+  let page = 1;
+  let truncated = false;
+
+  while (commits.length < maxCommits) {
+    const url = new URL(`https://api.github.com/repos/${owner}/${repo}/commits`);
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+
+    const response = await fetch(url, { headers: githubHeaders() });
+    if (!response.ok) {
+      await throwGithubResponseError(response, "commits_list");
+    }
+
+    const batch = await response.json();
+    if (!Array.isArray(batch) || batch.length === 0) break;
+
+    const remaining = maxCommits - commits.length;
+    commits.push(...batch.slice(0, remaining));
+
+    if (batch.length < 100) break;
+    if (commits.length >= maxCommits) {
+      truncated = true;
+      break;
+    }
+    page += 1;
+  }
+
+  return { commits, truncated };
 }
 
 /**
@@ -488,6 +521,34 @@ app.post("/api/summarize-range", async (req, res) => {
   }
 });
 
+app.get("/api/commits", async (req, res) => {
+  try {
+    const owner = String(req.query.repoOwner || "").trim();
+    const repo = String(req.query.repoName || "").trim();
+
+    if (!owner || !repo) {
+      return res.status(400).json({ error: "repoOwner and repoName are required." });
+    }
+
+    const { commits, truncated } = await fetchGithubCommitsForDropdown(owner, repo);
+    const payload = commits.map((c) => ({
+      sha: c.sha,
+      short_sha: String(c.sha || "").slice(0, 7),
+      message: String(c.commit?.message || "").split("\n")[0].slice(0, 120),
+      date: c.commit?.committer?.date || null,
+      author: c.commit?.author?.name || c.author?.login || "unknown",
+    }));
+
+    return res.json({
+      commits: payload,
+      truncated,
+      limit: MAX_DROPDOWN_COMMITS,
+    });
+  } catch (error) {
+    return sendModelError(res, error);
+  }
+});
+
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   app.use((req, res) => {
@@ -495,6 +556,10 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-app.listen(8000, () => {
-  console.log("Server running on http://localhost:8000");
-});
+if (!process.env.VERCEL) {
+  app.listen(8000, () => {
+    console.log("Server running on http://localhost:8000");
+  });
+}
+
+export default app;
